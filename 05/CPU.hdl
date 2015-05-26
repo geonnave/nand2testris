@@ -6,23 +6,23 @@
 /**
  * The Hack CPU (Central Processing unit), consisting of an ALU,
  * two registers named A and D, and a program counter named PC.
- * The CPU is designed to fetch and execute instructions written in 
+ * The CPU is designed to fetch and execute instructions written in
  * the Hack machine language. In particular, functions as follows:
- * Executes the inputted instruction according to the Hack machine 
+ * Executes the inputted instruction according to the Hack machine
  * language specification. The D and A in the language specification
  * refer to CPU-resident registers, while M refers to the external
- * memory location addressed by A, i.e. to Memory[A]. The inM input 
- * holds the value of this location. If the current instruction needs 
- * to write a value to M, the value is placed in outM, the address 
- * of the target location is placed in the addressM output, and the 
- * writeM control bit is asserted. (When writeM==0, any value may 
- * appear in outM). The outM and writeM outputs are combinational: 
- * they are affected instantaneously by the execution of the current 
- * instruction. The addressM and pc outputs are clocked: although they 
- * are affected by the execution of the current instruction, they commit 
- * to their new values only in the next time step. If reset==1 then the 
- * CPU jumps to address 0 (i.e. pc is set to 0 in next time step) rather 
- * than to the address resulting from executing the current instruction. 
+ * memory location addressed by A, i.e. to Memory[A]. The inM input
+ * holds the value of this location. If the current instruction needs
+ * to write a value to M, the value is placed in outM, the address
+ * of the target location is placed in the addressM output, and the
+ * writeM control bit is asserted. (When writeM==0, any value may
+ * appear in outM). The outM and writeM outputs are combinational:
+ * they are affected instantaneously by the execution of the current
+ * instruction. The addressM and pc outputs are clocked: although they
+ * are affected by the execution of the current instruction, they commit
+ * to their new values only in the next time step. If reset==1 then the
+ * CPU jumps to address 0 (i.e. pc is set to 0 in next time step) rather
+ * than to the address resulting from executing the current instruction.
  */
 
 CHIP CPU {
@@ -34,10 +34,48 @@ CHIP CPU {
                          // the current program (reset==0).
 
     OUT outM[16],        // M value output
-        writeM,          // Write to M? 
+        writeM,          // Write to M?
         addressM[15],    // Address in data memory (of M)
         pc[15];          // address of next instruction
 
     PARTS:
-    // Put your code here:
+    // negate op-code because if it is an A-instruction (op-code == 0), ARegister need to be loaded
+    Not (in=instruction[15], out=insNOT);
+    // if is C-instruction and [5] is 1, must load ARegister
+    And (a=instruction[15], b=instruction[5], out=isCloadAREG);
+      // ARegister is loaded case one of the above is true
+      Or (a=insNOT, b=isCloadAREG, out=loadAREG);
+    Mux16 (a=instruction, b=outALU, sel=instruction[15], out=toAREG);
+    ARegister (in=toAREG, load=loadAREG, out=outAREG, out[0..14]=addressM);
+
+    // load DRegister if is C-instruction (op-code == 1) and [4] == 1
+    And (a=instruction[4], b=instruction[15], out=loadDREG);
+    DRegister (in=outALU, load=loadDREG, out=outDREG);
+
+    Mux16 (a=outAREG, b=inM, sel=instruction[12], out=aregORinm);
+    ALU (x=outDREG, y=aregORinm,
+      zx=instruction[11],
+      nx=instruction[10],
+      zy=instruction[9],
+      ny=instruction[8],
+      f=instruction[7],
+      no=instruction[6],
+      zr=outZR, ng=outNG, out=outALU, out=outM);
+
+    // compute load = f(instruction[0..2], [nr, ng])
+    Not (in=outNG, out=notNG);
+    Not (in=outZR, out=notZR);
+    And (a=notNG, b=notZR, out=outjmpPS); // outALU is positive if !(ng && zr)
+    And (a=instruction[0], b=outjmpPS, out=jmpPS);
+    And (a=instruction[1], b=outZR, out=jmpZR);
+    And (a=instruction[2], b=outNG, out=jmpNG);
+    Or (a=jmpPS, b=jmpNG, out=jmpNGPS);
+    Or (a=jmpNGPS, b=jmpZR, out=toloadPC);
+    And (a=toloadPC, b=instruction[15], out=loadPC);
+
+    // writeM if is C-instruction (op-code == 1) and [3] == 1
+    And (a=instruction[3], b=instruction[15], out=writeM);
+
+    PC (in=outAREG, load=loadPC, inc=true, reset=reset, out[0..14]=pc);
+
 }
