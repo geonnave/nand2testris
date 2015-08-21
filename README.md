@@ -1,3 +1,6 @@
+# NOTE:
+Code deleted to difficult cheating. If you really really really really really wanna see the code, checkout to a previous commit.
+
 # nand2testris
 My implementations for the nan2tetris course (https://www.coursera.org/course/nand2tetris1 | http://nand2tetris.org/)
 
